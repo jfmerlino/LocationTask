@@ -1,0 +1,154 @@
+import SwiftUI
+import MapKit
+import CoreLocation
+
+
+class Task: NSObject {
+    let name: String
+    let taskDescription: String
+    let dueDate: Date
+    
+    init(name: String, description: String, dueDate: Date) {
+        self.name = name
+        self.taskDescription = description
+        self.dueDate = dueDate
+    }
+}
+
+class TaskCache {
+    static let shared = TaskCache()
+    private let cache = NSCache<NSString, Task>()
+    private init() {}
+    
+    func set(_ task: Task, forKey key: String) {
+        cache.setObject(task, forKey: key as NSString)
+    }
+    
+    func get(forKey key: String) -> Task? {
+        return cache.object(forKey: key as NSString)
+    }
+}
+
+
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    let manager = CLLocationManager()
+    @Published var location: CLLocationCoordinate2D?
+    
+    override init() {
+        super.init()
+        manager.delegate = self
+    }
+    
+    func requestLocation() {
+        manager.requestWhenInUseAuthorization()
+        manager.requestLocation()
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.first else { return }
+        self.location = location.coordinate
+        print(location.coordinate.latitude)
+        print(location.coordinate.longitude)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print(error)
+    }
+    
+    func createTask(name: String, description: String, dueDate: Date) {
+        let task = Task(name: name, description: description, dueDate: dueDate)
+        TaskCache.shared.set(task, forKey: "uniqueTaskKey") // Use a unique key for each task
+    }
+}
+
+struct ContentView: View {
+    @ObservedObject var locationManager = LocationManager()
+    @State private var region = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 39.2904, longitude: -76.6122),
+        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    )
+    
+    @State private var isShowingSheet = false
+    @State private var selectedCoordinate: CLLocationCoordinate2D = CLLocationCoordinate2D()
+    @State private var taskName = ""
+    @State private var taskDescription = ""
+    @State private var dueDate = Date()
+
+    var isFormValid: Bool {
+        return !taskName.isEmpty && !taskDescription.isEmpty && dueDate > Date()
+    }
+
+    var body: some View {
+        NavigationView {
+            Map(coordinateRegion: $region, showsUserLocation: true)
+                .navigationBarTitle("LocationTasks")
+                .navigationBarItems(trailing:
+                    Button("View Tasks") {
+                        // Action when View Tasks button is tapped
+                        // Implement your logic here
+                    // Action when View Tasks button is tapped
+                    if let task = TaskCache.shared.get(forKey: "uniqueTaskKey") {
+                    // Access task data and perform actions
+                            print("Task Name: \(task.name)")
+                            print("Task Description: \(task.description)")
+                            print("Due Date: \(task.dueDate)")
+                            } else {
+                                print("No task found")
+                            }
+                    }
+                )
+                .onAppear {
+                    locationManager.requestLocation()
+                }
+                .onTapGesture(count: 1) {
+                    isShowingSheet = false
+                }
+                .onLongPressGesture(minimumDuration: 1.0) {
+                    isShowingSheet = true
+                }
+                .sheet(isPresented: $isShowingSheet) {
+                    VStack {
+                        Text("Please enter your task")
+                            .font(.headline)
+                            .padding()
+                        TextField("Task Name", text: $taskName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .padding()
+                        
+                        TextField("Description", text: $taskDescription)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .padding()
+
+                        DatePicker("Due Date", selection: $dueDate, in: Date()..., displayedComponents: .date)
+                            .datePickerStyle(WheelDatePickerStyle())
+                            .padding()
+                        
+                        Button("Confirm") {
+                            // Action when Confirm button is tapped
+                            // Implement your logic here
+                            
+                            createTask()
+                            isShowingSheet = false
+                        }
+                        .padding()
+                        .disabled(!isFormValid)
+                    }
+                    .padding()
+                }
+        }
+    }
+    
+    private func createTask() {
+        let newTask = Task(name: taskName, description: taskDescription, dueDate: dueDate)
+        TaskCache.shared.set(newTask, forKey: "uniqueTaskKey")
+        taskName = ""
+        taskDescription = ""
+        dueDate = Date()
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
